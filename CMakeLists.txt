@@ -26,6 +26,7 @@ else()
 endif()
 
 IF (WIN32)
+    set(CMAKE_GENERATOR_TOOLSET "ClangCL") #vs2019
 	#SET(CMAKE_C_COMPILER "c:/Program Files/LLVM/bin/clang")
 	#SET(CMAKE_CXX_COMPILER "c:/Program Files/LLVM/bin/clang++")
 ELSEIF (APPLE)
