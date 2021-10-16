@@ -71,7 +71,7 @@ namespace protoo {
     json Message::createSuccessResponse(json request, json data) {
         json response = {
                 {"response", true},
-                {"id", request["id"].get<int>()},
+                {"id", request["id"].get<uint32_t>()},
                 {"ok", true},
                 {"data", data}
         };
