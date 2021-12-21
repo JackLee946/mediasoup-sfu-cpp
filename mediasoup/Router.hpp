@@ -1,7 +1,7 @@
 #pragma once
 #include <string>
 #include <vector>
-#include <boost/lockfree/queue.hpp>
+//#include <boost/lockfree/queue.hpp>
 #include <stdexcept>
 #include "Log.hpp"
 #include "ChannelAgent.hpp"
@@ -111,7 +111,7 @@ struct PipeToRouterResult
 
 //const logger = new Logger('Router");
 
-class Router   : public EnhancedEventEmitter
+class Router   : public EnhancedEventEmitter, public std::enable_shared_from_this<Router>
 {
 public:
 	// Internal data.
@@ -437,7 +437,7 @@ public:
 
 		//const internal = { ...this->_internal, transportId: uuidv4() };
         json internal = this->_internal;
-        internal["transportId"] = uuidv4();
+		internal["transportId"] = uuidv4();
 		const json reqData = {
             {"listenIps",listenIps},
             {"enableUdp",enableUdp},
@@ -469,6 +469,7 @@ public:
         std::shared_ptr<WebRtcTransport> transport = std::make_shared<WebRtcTransport>(
              params
         );
+		transport->handleWorkerNotifications();
         //{
 //            internal,
 //            data1,
@@ -485,40 +486,37 @@ public:
         //}
 		this->_transports[transport->id()] = transport;
 		//transport.on('@close', () => this->_transports.delete(transport.id));
-        transport->on("@close",[&](  )
+        transport->on("@close",[self = shared_from_this(), transport](  )
         {
-            this->_transports.erase(transport->id());
+            self->_transports.erase(transport->id());
 
         });
         
         //transport.on('@newproducer', (producer: Producer) => this->_producers.set(producer.id, producer));
-        transport->on("@newproducer",[&]( std::shared_ptr<Producer> &producer)
+        transport->on("@newproducer",[self = shared_from_this()]( std::shared_ptr<Producer> &producer)
         {
-            this->_producers[producer->id()] = producer;
+            self->_producers[producer->id()] = producer;
 
         });
             //transport.on('@producerclose', (producer: Producer) => this->_producers.delete(producer.id));
-        transport->on("@producerclose",[&](  std::shared_ptr<Producer> &producer)
-        {
-            this->_producers.erase(producer->id());
-
-        });
+		transport->on("@producerclose", [self = shared_from_this()](std::shared_ptr<Producer>& producer)
+			{
+				self->_producers.erase(producer->id());
+			});
             //transport.on('@newdataproducer', (dataProducer: DataProducer) => (
             //	this->_dataProducers.set(dataProducer.id, dataProducer)
             //));
-        transport->on("@newdataproducer",[&](  std::shared_ptr<DataProducer> &dataProducer)
+        transport->on("@newdataproducer",[self = shared_from_this()](  std::shared_ptr<DataProducer> &dataProducer)
         {
-            this->_dataProducers[dataProducer->id()] = dataProducer;
+            self->_dataProducers[dataProducer->id()] = dataProducer;
             
         });
             //transport.on('@dataproducerclose', (dataProducer: DataProducer) => (
             //	this->_dataProducers.delete(dataProducer.id)
             //));
-        transport->on("@dataproducerclose",[&]( std::shared_ptr<DataProducer> &dataProducer)
+        transport->on("@dataproducerclose",[self = shared_from_this()](std::string id)
         {
-
-            this->_dataProducers.erase(dataProducer->id());
-            
+            self->_dataProducers.erase(id);            
 
         });
 
@@ -572,7 +570,7 @@ public:
 
 		//const internal = { ...this->_internal, transportId: uuidv4() };
         json internal = this->_internal;
-        internal["transportId"] = uuidv4();
+		internal["transportId"] = uuidv4();
 		const json reqData = {
             {"listenIp",listenIp},
             {"rtcpMux",rtcpMux},
@@ -600,6 +598,8 @@ public:
         params.getDataProducerById = this->getDataProducerByIdFunc;
    
         std::shared_ptr<PlainTransport> transport = std::make_shared<PlainTransport>(params);
+		transport->handleWorkerNotifications();
+
 //        internal,
 //        data,
 //        this->_channel,
@@ -614,41 +614,35 @@ public:
 //        //)
 		this->_transports[transport->id()] = transport;
         //transport.on('@close', () => this->_transports.delete(transport.id));
-        transport->on("@close",[&](  )
+        transport->on("@close",[self = shared_from_this(), transport](  )
         {
-            this->_transports.erase(transport->id());
+            self->_transports.erase(transport->id());
 
         });
         
         //transport.on('@newproducer', (producer: Producer) => this->_producers.set(producer.id, producer));
-        transport->on("@newproducer",[&]( std::shared_ptr<Producer> &producer)
+        transport->on("@newproducer",[self = shared_from_this()]( std::shared_ptr<Producer> &producer)
         {
-            this->_producers[producer->id()] = producer;
-
+            self->_producers[producer->id()] = producer;
         });
             //transport.on('@producerclose', (producer: Producer) => this->_producers.delete(producer.id));
-        transport->on("@producerclose",[&](  std::shared_ptr<Producer> &producer)
+        transport->on("@producerclose",[self = shared_from_this()](std::shared_ptr<Producer>& producer)
         {
-            this->_producers.erase(producer->id());
-
+            self->_producers.erase(producer->id());
         });
             //transport.on('@newdataproducer', (dataProducer: DataProducer) => (
             //    this->_dataProducers.set(dataProducer.id, dataProducer)
             //));
-        transport->on("@newdataproducer",[&](  std::shared_ptr<DataProducer> &dataProducer)
+        transport->on("@newdataproducer",[self = shared_from_this()](std::shared_ptr<DataProducer> &dataProducer)
         {
-            this->_dataProducers[dataProducer->id()] = dataProducer;
-            
+            self->_dataProducers[dataProducer->id()] = dataProducer;            
         });
             //transport.on('@dataproducerclose', (dataProducer: DataProducer) => (
             //    this->_dataProducers.delete(dataProducer.id)
             //));
-        transport->on("@dataproducerclose",[&]( std::shared_ptr<DataProducer> &dataProducer)
+        transport->on("@dataproducerclose",[self = shared_from_this()](std::string id)
         {
-
-            this->_dataProducers.erase(dataProducer->id());
-            
-
+            self->_dataProducers.erase(id);
         });
 
 
@@ -698,7 +692,7 @@ public:
 
 		//const internal = { ...this->_internal, transportId: uuidv4() };
         json internal = this->_internal;
-        internal["transportId"] = uuidv4();
+		internal["transportId"] = uuidv4();
 		const json reqData = {
             {"listenIp",listenIp},
             {"enableSctp",enableSctp},
@@ -722,6 +716,7 @@ public:
         params.getProducerById = this->getProducerByIdFunc;
         params.getDataProducerById = this->getDataProducerByIdFunc;
         std::shared_ptr<PipeTransport> transport = std::make_shared<PipeTransport>(params);
+		transport->handleWorkerNotifications();
 //        internal,
 //        data,
 //        this->_channel,
@@ -734,42 +729,35 @@ public:
 //        getDataProducerById,// : (dataProducerId): DataProducer | undefined => (
 		this->_transports[transport->id()] = transport;
         //transport.on('@close', () => this->_transports.delete(transport.id));
-        transport->on("@close",[&](  )
+        transport->on("@close",[self = shared_from_this(), transport](  )
         {
-            this->_transports.erase(transport->id());
-
+            self->_transports.erase(transport->id());
         });
         
         //transport.on('@newproducer', (producer: Producer) => this->_producers.set(producer.id, producer));
-        transport->on("@newproducer",[&]( std::shared_ptr<Producer> &producer)
-        {
-            this->_producers[producer->id()] = producer;
-
-        });
+        transport->on("@newproducer",[self = shared_from_this()](std::shared_ptr<Producer>& producer)
+		{
+			self->_producers[producer->id()] = producer;
+		});
             //transport.on('@producerclose', (producer: Producer) => this->_producers.delete(producer.id));
-        transport->on("@producerclose",[&](  std::shared_ptr<Producer> &producer)
-        {
-            this->_producers.erase(producer->id());
-
-        });
+        transport->on("@producerclose",[self = shared_from_this()](std::shared_ptr<Producer>& producer)
+		{
+			self->_producers.erase(producer->id());
+		});
             //transport.on('@newdataproducer', (dataProducer: DataProducer) => (
             //    this->_dataProducers.set(dataProducer.id, dataProducer)
             //));
-        transport->on("@newdataproducer",[&](  std::shared_ptr<DataProducer> &dataProducer)
-        {
-            this->_dataProducers[dataProducer->id()] = dataProducer;
-            
-        });
+        transport->on("@newdataproducer",[self = shared_from_this()](std::shared_ptr<DataProducer>& dataProducer)
+		{
+			self->_dataProducers[dataProducer->id()] = dataProducer;
+		});
             //transport.on('@dataproducerclose', (dataProducer: DataProducer) => (
             //    this->_dataProducers.delete(dataProducer.id)
             //));
-        transport->on("@dataproducerclose",[&]( std::shared_ptr<DataProducer> &dataProducer)
-        {
-
-            this->_dataProducers.erase(dataProducer->id());
-            
-
-        });
+        transport->on("@dataproducerclose",[self = shared_from_this()](std::string id)
+		{
+			self->_dataProducers.erase(id);
+		});
 
 		// Emit observer event.
 		this->_observer->safeEmit("newtransport", transport);
@@ -789,7 +777,7 @@ public:
         json appData = options._appData;
 		//const internal = { ...this->_internal, transportId: uuidv4() };
         json internal = this->_internal;
-        internal["transportId"] = uuidv4();
+		internal["transportId"] = uuidv4();
 		const json reqData = {
             { "direct", true },
             {"maxMessageSize",maxMessageSize }
@@ -807,6 +795,7 @@ public:
         params.getProducerById = this->getProducerByIdFunc;
         params.getDataProducerById = this->getDataProducerByIdFunc;
         std::shared_ptr<DirectTransport> transport = std::make_shared<DirectTransport>(params);
+		transport->handleWorkerNotifications();
 //        internal,
 //        data,
 //        this->_channel,
@@ -819,42 +808,35 @@ public:
 //        getDataProducerById// : (dataProducerId): DataProducer | undefined => (
 		this->_transports[transport->id()] =  transport;
         //transport.on('@close', () => this->_transports.delete(transport.id));
-        transport->on("@close",[&](  )
-        {
-            this->_transports.erase(transport->id());
-
-        });
+        transport->on("@close",[self = shared_from_this(), transport]()
+		{
+			self->_transports.erase(transport->id());
+		});
         
         //transport.on('@newproducer', (producer: Producer) => this->_producers.set(producer.id, producer));
-        transport->on("@newproducer",[&]( std::shared_ptr<Producer> &producer)
-        {
-            this->_producers[producer->id()] = producer;
-
-        });
+        transport->on("@newproducer",[self = shared_from_this()](std::shared_ptr<Producer>& producer)
+		{
+			self->_producers[producer->id()] = producer;
+		});
             //transport.on('@producerclose', (producer: Producer) => this->_producers.delete(producer.id));
-        transport->on("@producerclose",[&](  std::shared_ptr<Producer> &producer)
-        {
-            this->_producers.erase(producer->id());
-
-        });
+        transport->on("@producerclose",[self = shared_from_this()](std::shared_ptr<Producer>& producer)
+		{
+			self->_producers.erase(producer->id());
+		});
             //transport.on('@newdataproducer', (dataProducer: DataProducer) => (
             //    this->_dataProducers.set(dataProducer.id, dataProducer)
             //));
-        transport->on("@newdataproducer",[&](  std::shared_ptr<DataProducer> &dataProducer)
-        {
-            this->_dataProducers[dataProducer->id()] = dataProducer;
-            
-        });
+        transport->on("@newdataproducer",[self = shared_from_this()](std::shared_ptr<DataProducer>& dataProducer)
+		{
+			self->_dataProducers[dataProducer->id()] = dataProducer;
+		});
             //transport.on('@dataproducerclose', (dataProducer: DataProducer) => (
             //    this->_dataProducers.delete(dataProducer.id)
             //));
-        transport->on("@dataproducerclose",[&]( std::shared_ptr<DataProducer> &dataProducer)
-        {
-
-            this->_dataProducers.erase(dataProducer->id());
-            
-
-        });
+        transport->on("@dataproducerclose",[self = shared_from_this()](std::string id)
+		{
+			self->_dataProducers.erase(id);
+		});
 
 		// Emit observer event.
 		this->_observer->safeEmit("newtransport", transport);
@@ -1102,7 +1084,7 @@ public:
 
 		//const internal = { ...this->_internal, rtpObserverId: uuidv4() };
         json internal = this->_internal;
-        internal["rtpObserverId"] = uuidv4();
+		internal["rtpObserverId"] = uuidv4();
 		const json reqData = {
             {"maxEntries",maxEntries},
             {"threshold",threshold},
@@ -1118,11 +1100,12 @@ public:
         params.getProducerById = this->getProducerByIdFunc;
 
         std::shared_ptr<AudioLevelObserver> audioLevelObserver = std::make_shared<AudioLevelObserver>(params);
+		audioLevelObserver->handleWorkerNotifications();
 
       this->_rtpObservers[audioLevelObserver->id()] =  audioLevelObserver;
-      audioLevelObserver->on("@close",[&]( )
+      audioLevelObserver->on("@close",[self = shared_from_this(), audioLevelObserver]( )
         {
-            this->_rtpObservers.erase(audioLevelObserver->id());
+            self->_rtpObservers.erase(audioLevelObserver->id());
 
         });
 

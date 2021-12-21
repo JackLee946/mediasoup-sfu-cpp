@@ -15,6 +15,7 @@
 #include "Promise.hpp"
 #include "uuid.hpp"
 #include "ortc.hpp"
+#include <memory>
 
 using json = nlohmann::json;
 using namespace uuid;
@@ -145,11 +146,38 @@ void to_json(json& j, const DtlsParameters& st);
 void from_json(const json& j, DtlsParameters& st);
 
 
+ /* First a common base class
+  * of course, one should always virtually inherit from it.
+  */
+class MultipleInheritableEnableSharedFromThis : public std::enable_shared_from_this<MultipleInheritableEnableSharedFromThis>
+{
+public:
+	virtual ~MultipleInheritableEnableSharedFromThis()
+	{}
+};
+
+template <class T>
+class inheritable_enable_shared_from_this : virtual public MultipleInheritableEnableSharedFromThis
+{
+public:
+	std::shared_ptr<T> shared_from_this() {
+		return std::dynamic_pointer_cast<T>(MultipleInheritableEnableSharedFromThis::shared_from_this());
+	}
+	/* Utility method to easily downcast.
+	 * Useful when a child doesn't inherit directly from enable_shared_from_this
+	 * but wants to use the feature.
+	 */
+	template <class Down>
+	std::shared_ptr<Down> downcasted_shared_from_this() {
+		return std::dynamic_pointer_cast<Down>(MultipleInheritableEnableSharedFromThis::shared_from_this());
+	}
+};
+
 //type SctpState = 'new' | 'connecting' | 'connected' | 'failed' | 'closed';
 
 //const logger = new Logger('Transport");
 
-class Transport  : public EnhancedEventEmitter
+class Transport  : public EnhancedEventEmitter, public inheritable_enable_shared_from_this<Transport>
 {
 	// Internal data.
 public:
@@ -604,11 +632,7 @@ public:
         MS_lOGD("getConsumableRtpParameters jconsumableRtpParameters=%s",jconsumableRtpParameters.dump(4).c_str());
 		//const internal = { ...this->_internal, producerId: id || uuidv4() };
         json internal = this->_internal;
-        if(!id.empty()) {
-            internal["producerId"] = id;
-        } else {
-            internal["producerId"] = uuidv4();
-        }
+		internal["producerId"] = id.empty() ? uuidv4() : id;
         
 		const json reqData = {
             {"kind",kind},
@@ -639,12 +663,14 @@ public:
 				paused
 			//}
         );
+		producer->handleWorkerNotifications();
 
 		this->_producers[producer->id()] =  producer;
-		producer->on("@close",[&]()
+
+		producer->on("@close",[self = shared_from_this(), producer]()
 		{
-			this->_producers.erase(producer->id());
-			this->emit("@producerclose", producer);
+			self->_producers.erase(producer->id());
+			self->emit("@producerclose", producer);
 		});
 
 		this->emit("@newproducer", producer);
@@ -714,7 +740,7 @@ public:
 		}
         //const internal = { ...this->_internal, consumerId: uuidv4(), producerId };
         json internal = this->_internal;
-        internal["consumerId"] = uuidv4();
+		internal["consumerId"] = uuidv4();
         internal["producerId"] = producerId;
         
        
@@ -752,18 +778,19 @@ public:
                 preferredLayers1//status["preferredLayers"]
 			//}
         );
+		consumer->handleWorkerNotifications();
 
 		this->_consumers[consumer->id()] =  consumer;
 		//consumer.on('@close', () => this->_consumers.delete(consumer.id));
-        consumer->on("@close",[&](  )
+        consumer->on("@close",[self = shared_from_this(), consumer](  )
         {
-            this->_consumers.erase(consumer->id());
+            self->_consumers.erase(consumer->id());
 
         });
 		//consumer.on('@producerclose', () => this->_consumers.delete(consumer.id));
-        consumer->on("@producerclose",[&](  )
+        consumer->on("@producerclose",[self = shared_from_this(), consumer](  )
         {
-            this->_consumers.erase(consumer->id());
+            self->_consumers.erase(consumer->id());
         });
 
 		// Emit observer event.
@@ -939,7 +966,7 @@ public:
         auto protocol = dataProducer->protocol();
 		//const internal = { ...this->_internal, dataConsumerId: uuidv4(), dataProducerId };
         json internal = this->_internal;
-        internal["dataConsumerId"] = uuidv4();
+		internal["dataConsumerId"] = uuidv4();
         internal["dataProducerId"] = dataProducerId;
 		const json reqData = {
             {"type",type},
@@ -960,21 +987,22 @@ public:
 				appData
 			//}
         );
+		dataConsumer->handleWorkerNotifications();
 
 		this->_dataConsumers[dataConsumer->id()] = dataConsumer;
-		dataConsumer->on("@close",[&](  )
+		dataConsumer->on("@close",[self = shared_from_this(), dataConsumer, sctpStreamId](  )
 		{
-			this->_dataConsumers.erase(dataConsumer->id());
+			self->_dataConsumers.erase(dataConsumer->id());
 
-			if (this->_sctpStreamIds.size() != 0)
-				this->_sctpStreamIds[sctpStreamId] = 0;
+			if (self->_sctpStreamIds.size() != 0)
+				self->_sctpStreamIds[sctpStreamId] = 0;
 		});
-		dataConsumer->on("@dataproducerclose",[&](  )
+		dataConsumer->on("@dataproducerclose",[self = shared_from_this(), dataConsumer, sctpStreamId](  )
 		{
-            this->_dataConsumers.erase(dataConsumer->id());
+            self->_dataConsumers.erase(dataConsumer->id());
 
-            if (this->_sctpStreamIds.size() != 0)
-                this->_sctpStreamIds[sctpStreamId] = 0;
+            if (self->_sctpStreamIds.size() != 0)
+				self->_sctpStreamIds[sctpStreamId] = 0;
 		});
 
 		// Emit observer event.
