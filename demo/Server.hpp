@@ -110,4 +110,6 @@ private:
 
     std::shared_ptr<Config> m_pConfig;
     int nextMediasoupWorkerIdx =0;
+public:
+    std::shared_ptr<Room> m_delRoom;
 };
