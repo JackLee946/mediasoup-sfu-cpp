@@ -859,11 +859,10 @@ public:
 
 		json data =
 			this->_channel->request("transport.produceData", internal, reqData);
-        json data1;
         std::shared_ptr<DataProducer> dataProducer = std::make_shared<DataProducer>(
 			//{
 				internal,
-                data1,
+                data,
 				this->_channel,
 				this->_payloadChannel,
 				appData
@@ -978,11 +977,10 @@ public:
 
 		json data =
 			this->_channel->request("transport.consumeData", internal, reqData);
-        json data1;
         std::shared_ptr<DataConsumer> dataConsumer = std::make_shared<DataConsumer>(
 			//{
 				internal,
-				data1,
+				data,
 				this->_channel,
 				this->_payloadChannel,
 				appData
